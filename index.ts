@@ -2,9 +2,10 @@ import {
   createCliRenderer,
   CliRenderer,
   BoxRenderable,
-  TextRenderable,
-  TextAttributes,
   ASCIIFontRenderable,
+  TextRenderable,
+  bold,
+  t,
 } from "@opentui/core";
 
 /* variables */
@@ -17,6 +18,14 @@ let hour: ASCIIFontRenderable | null = null;
 let minute: ASCIIFontRenderable | null = null;
 let seconds: ASCIIFontRenderable | null = null;
 let interval: NodeJS.Timeout | null = null;
+let hintsContainer: BoxRenderable | null = null;
+let hints: {
+  quit: TextRenderable | null;
+  alarm: TextRenderable | null;
+} = {
+  quit: null,
+  alarm: null,
+};
 
 function getCurrentTime() {
   const now = new Date();
@@ -48,6 +57,7 @@ function run(rendererInstance: CliRenderer) {
   /* add container to root */
   container = new BoxRenderable(renderer, {
     id: "container",
+    position: "relative",
     width: "100%",
     height: "100%",
     flexDirection: "column",
@@ -55,6 +65,34 @@ function run(rendererInstance: CliRenderer) {
     justifyContent: "center",
   });
   renderer.root.add(container);
+
+  /* hints container */
+  hintsContainer = new BoxRenderable(renderer, {
+    id: "hints-container",
+    position: "absolute",
+    width: "100%",
+    bottom: 1,
+    right: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+  });
+  container.add(hintsContainer);
+
+  /* hints setup */
+  hints = {
+    quit: new TextRenderable(renderer, {
+      id: "quit-text",
+      content: t`${bold("q:")} quit`,
+    }),
+    alarm: new TextRenderable(renderer, {
+      id: "alarm-text",
+      content: t`${bold("a:")} set new alarm`,
+    }),
+  };
+  hintsContainer.add(hints.alarm);
+  hintsContainer.add(hints.quit);
 
   /* timer container */
   timerContainer = new BoxRenderable(renderer, {
@@ -114,8 +152,10 @@ function run(rendererInstance: CliRenderer) {
 
 function setupKeybinds(rendererInstance: CliRenderer) {
   rendererInstance.keyInput.on("keypress", (key) => {
-    if (key.name === "q") {
+    if (key.name === "q" || (key.name === "c" && key.ctrl)) {
       destroy();
+    } else if (key.name === "a") {
+      console.log("set new alarm...");
     }
   });
 }
@@ -124,6 +164,11 @@ function destroy() {
   container?.destroy();
 
   container = null;
+  hintsContainer = null;
+  hints = {
+    quit: null,
+    alarm: null,
+  };
   timerContainer = null;
   hour = null;
   minute = null;
@@ -138,7 +183,9 @@ function destroy() {
 }
 
 if (import.meta.main) {
-  const renderer = await createCliRenderer();
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: false,
+  });
   run(renderer);
   setupKeybinds(renderer);
 }
