@@ -7,6 +7,7 @@ import {
   bold,
   t,
 } from "@opentui/core";
+import { readArgs } from "./utils/args";
 
 /* variables */
 let renderer: CliRenderer | null = null;
@@ -19,23 +20,38 @@ let minute: ASCIIFontRenderable | null = null;
 let seconds: ASCIIFontRenderable | null = null;
 let interval: NodeJS.Timeout | null = null;
 let hintsContainer: BoxRenderable | null = null;
+let period: "AM" | "PM" = "AM";
+let periodText: ASCIIFontRenderable | null = null;
+let is12Hour: boolean = false;
 let hints: {
   quit: TextRenderable | null;
   alarm: TextRenderable | null;
+  format: TextRenderable | null;
 } = {
   quit: null,
   alarm: null,
+  format: null,
 };
 
 function getCurrentTime() {
   const now = new Date();
 
-  const hours = String(now.getHours()).padStart(2, "0");
+  let hours = now.getHours();
   const minutes = String(now.getMinutes()).padStart(2, "0");
   const seconds = String(now.getSeconds()).padStart(2, "0");
 
+  if (is12Hour) {
+    period = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+  }
+
+  if (periodText) {
+    periodText.visible = is12Hour;
+    periodText.text = period;
+  }
+
   return {
-    hours,
+    hours: String(hours).padStart(2, "0"),
     minutes,
     seconds,
   };
@@ -82,17 +98,23 @@ function run(rendererInstance: CliRenderer) {
 
   /* hints setup */
   hints = {
-    quit: new TextRenderable(renderer, {
-      id: "quit-text",
-      content: t`${bold("q:")} quit`,
-    }),
     alarm: new TextRenderable(renderer, {
       id: "alarm-text",
       content: t`${bold("a:")} set new alarm`,
     }),
+    format: new TextRenderable(renderer, {
+      id: "format-text",
+      content: t`${bold("t:")} change time format`,
+    }),
+    quit: new TextRenderable(renderer, {
+      id: "quit-text",
+      content: t`${bold("q:")} quit`,
+    }),
   };
-  hintsContainer.add(hints.alarm);
-  hintsContainer.add(hints.quit);
+
+  Object.entries(hints).forEach(([, renderable]) => {
+    hintsContainer?.add(renderable);
+  });
 
   /* timer container */
   timerContainer = new BoxRenderable(renderer, {
@@ -147,6 +169,17 @@ function run(rendererInstance: CliRenderer) {
   });
   timerContainer.add(seconds);
 
+  periodText = new ASCIIFontRenderable(renderer, {
+    id: "period-text",
+    text: period,
+    font: "tiny",
+    maxHeight: 5,
+    visible: is12Hour,
+    color: "#b7b7b7",
+    marginLeft: 1,
+  });
+  timerContainer.add(periodText);
+
   updateTime();
 }
 
@@ -156,6 +189,12 @@ function setupKeybinds(rendererInstance: CliRenderer) {
       destroy();
     } else if (key.name === "a") {
       console.log("set new alarm...");
+    } else if (key.name === "t") {
+      is12Hour = !is12Hour;
+      const time = getCurrentTime();
+      if (hour) hour.text = time.hours;
+      if (minute) minute.text = time.minutes;
+      if (seconds) seconds.text = time.seconds;
     }
   });
 }
@@ -165,9 +204,12 @@ function destroy() {
 
   container = null;
   hintsContainer = null;
+  ((is12Hour = false), (period = "AM"));
+  periodText = null;
   hints = {
     quit: null,
     alarm: null,
+    format: null,
   };
   timerContainer = null;
   hour = null;
@@ -183,6 +225,10 @@ function destroy() {
 }
 
 if (import.meta.main) {
+  const { values } = readArgs();
+  if (values["12h"]) {
+    is12Hour = true;
+  }
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
   });
