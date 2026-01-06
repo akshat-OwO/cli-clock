@@ -3,11 +3,9 @@ import {
   CliRenderer,
   BoxRenderable,
   ASCIIFontRenderable,
-  TextRenderable,
-  bold,
-  t,
 } from "@opentui/core";
 import { readArgs } from "./utils/args";
+import * as hintsUtility from "./utils/hints";
 
 /* variables */
 let renderer: CliRenderer | null = null;
@@ -23,15 +21,6 @@ let hintsContainer: BoxRenderable | null = null;
 let period: "AM" | "PM" = "AM";
 let periodText: ASCIIFontRenderable | null = null;
 let is12Hour: boolean = false;
-let hints: {
-  quit: TextRenderable | null;
-  alarm: TextRenderable | null;
-  format: TextRenderable | null;
-} = {
-  quit: null,
-  alarm: null,
-  format: null,
-};
 
 function getCurrentTime() {
   const now = new Date();
@@ -96,25 +85,8 @@ function run(rendererInstance: CliRenderer) {
   });
   container.add(hintsContainer);
 
-  /* hints setup */
-  hints = {
-    alarm: new TextRenderable(renderer, {
-      id: "alarm-text",
-      content: t`${bold("a:")} set new alarm`,
-    }),
-    format: new TextRenderable(renderer, {
-      id: "format-text",
-      content: t`${bold("t:")} change time format`,
-    }),
-    quit: new TextRenderable(renderer, {
-      id: "quit-text",
-      content: t`${bold("q:")} quit`,
-    }),
-  };
-
-  Object.entries(hints).forEach(([, renderable]) => {
-    hintsContainer?.add(renderable);
-  });
+  /* initialize hints utility */
+  hintsUtility.initialize(renderer, hintsContainer);
 
   /* timer container */
   timerContainer = new BoxRenderable(renderer, {
@@ -188,7 +160,10 @@ function setupKeybinds(rendererInstance: CliRenderer) {
     if (key.name === "q" || (key.name === "c" && key.ctrl)) {
       destroy();
     } else if (key.name === "a") {
+      hintsUtility.showHints("alarm");
       console.log("set new alarm...");
+    } else if (key.name === "escape") {
+      hintsUtility.showHints("default");
     } else if (key.name === "t") {
       is12Hour = !is12Hour;
       const time = getCurrentTime();
@@ -204,13 +179,9 @@ function destroy() {
 
   container = null;
   hintsContainer = null;
-  ((is12Hour = false), (period = "AM"));
+  is12Hour = false;
+  period = "AM";
   periodText = null;
-  hints = {
-    quit: null,
-    alarm: null,
-    format: null,
-  };
   timerContainer = null;
   hour = null;
   minute = null;
@@ -219,6 +190,8 @@ function destroy() {
   separator2 = null;
   if (interval) clearInterval(interval);
   interval = null;
+
+  hintsUtility.destroy();
 
   renderer?.destroy();
   renderer = null;
