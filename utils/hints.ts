@@ -30,6 +30,11 @@ const ALARM_HINTS: HintConfig = {
   hints: [
     { key: "s", label: "save alarm" },
     { key: "esc", label: "cancel" },
+    { key: "↑/↓", label: "change value" },
+    { key: "←/→", label: "select digit" },
+    { key: "0-9", label: "direct input" },
+    { key: "t", label: "change time format" },
+    { key: "q", label: "quit" },
   ],
 };
 
@@ -42,7 +47,10 @@ let currentConfigId: string | null = null;
 configs.set("default", DEFAULT_HINTS);
 configs.set("alarm", ALARM_HINTS);
 
-export function initialize(rendererInstance: CliRenderer, containerInstance: BoxRenderable) {
+export function initialize(
+  rendererInstance: CliRenderer,
+  containerInstance: BoxRenderable,
+) {
   if (renderer !== null) {
     destroy();
   }

@@ -6,6 +6,8 @@ import {
 } from "@opentui/core";
 import { readArgs } from "./utils/args";
 import * as hintsUtility from "./utils/hints";
+import * as alarmsUtility from "./utils/alarms";
+import type { Alarm } from "./utils/alarms";
 
 /* variables */
 let renderer: CliRenderer | null = null;
@@ -21,6 +23,9 @@ let hintsContainer: BoxRenderable | null = null;
 let period: "AM" | "PM" = "AM";
 let periodText: ASCIIFontRenderable | null = null;
 let is12Hour: boolean = false;
+let isAlarmMode: boolean = false;
+let globalAlarms: Alarm[] = [];
+let alarmCheckInterval: NodeJS.Timeout | null = null;
 
 function getCurrentTime() {
   const now = new Date();
@@ -47,12 +52,18 @@ function getCurrentTime() {
 }
 
 function updateTime() {
+  if (interval) clearInterval(interval);
   interval = setInterval(() => {
     const time = getCurrentTime();
     if (hour) hour.text = time.hours;
     if (minute) minute.text = time.minutes;
     if (seconds) seconds.text = time.seconds;
   }, 1000);
+}
+
+function pauseTime() {
+  if (interval) clearInterval(interval);
+  interval = null;
 }
 
 function run(rendererInstance: CliRenderer) {
@@ -155,21 +166,84 @@ function run(rendererInstance: CliRenderer) {
   updateTime();
 }
 
+function startAlarmChecking() {
+  if (alarmCheckInterval) return;
+  
+  alarmCheckInterval = setInterval(() => {
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentSecond = now.getSeconds();
+
+    globalAlarms.forEach((alarm) => {
+      let alarmHour = parseInt(alarm.hour);
+      const alarmMinute = parseInt(alarm.minute);
+      const alarmSecond = parseInt(alarm.second);
+
+      if (alarm.is12Hour && alarm.period === "PM" && alarmHour !== 12) {
+        alarmHour += 12;
+      } else if (alarm.is12Hour && alarm.period === "AM" && alarmHour === 12) {
+        alarmHour = 0;
+      }
+
+      const alarmTimeInSeconds = alarmHour * 3600 + alarmMinute * 60 + alarmSecond;
+      const currentTimeInSeconds = currentHour * 3600 + currentMinute * 60 + currentSecond;
+
+      if (currentTimeInSeconds === alarmTimeInSeconds) {
+        if (!alarm.triggered) {
+          alarm.triggered = true;
+          alarmsUtility.triggerAlarmNotification(alarm);
+        }
+      } else if (currentTimeInSeconds > alarmTimeInSeconds) {
+        alarm.triggered = false;
+      }
+    });
+  }, 1000);
+}
+
 function setupKeybinds(rendererInstance: CliRenderer) {
   rendererInstance.keyInput.on("keypress", (key) => {
     if (key.name === "q" || (key.name === "c" && key.ctrl)) {
       destroy();
     } else if (key.name === "a") {
-      hintsUtility.showHints("alarm");
-      console.log("set new alarm...");
+      pauseTime();
+      isAlarmMode = true;
+      if (renderer && container && hour && minute && seconds && periodText) {
+        alarmsUtility.initialize(
+          renderer,
+          container,
+          hour,
+          minute,
+          seconds,
+          periodText,
+          is12Hour,
+          (alarm: Alarm) => {
+            globalAlarms.push(alarm);
+            startAlarmChecking();
+          },
+          () => {
+            hintsUtility.showHints("default");
+            updateTime();
+            alarmsUtility.destroy();
+            isAlarmMode = false;
+          },
+        );
+      }
     } else if (key.name === "escape") {
       hintsUtility.showHints("default");
+      updateTime();
+      alarmsUtility.destroy();
+      isAlarmMode = false;
     } else if (key.name === "t") {
       is12Hour = !is12Hour;
       const time = getCurrentTime();
       if (hour) hour.text = time.hours;
       if (minute) minute.text = time.minutes;
       if (seconds) seconds.text = time.seconds;
+
+      if (isAlarmMode) {
+        alarmsUtility.setIs12HourMode(is12Hour);
+      }
     }
   });
 }
@@ -180,6 +254,7 @@ function destroy() {
   container = null;
   hintsContainer = null;
   is12Hour = false;
+  isAlarmMode = false;
   period = "AM";
   periodText = null;
   timerContainer = null;
@@ -190,6 +265,8 @@ function destroy() {
   separator2 = null;
   if (interval) clearInterval(interval);
   interval = null;
+  if (alarmCheckInterval) clearInterval(alarmCheckInterval);
+  alarmCheckInterval = null;
 
   hintsUtility.destroy();
 
